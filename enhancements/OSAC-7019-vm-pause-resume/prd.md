@@ -11,11 +11,19 @@
 ## Problem Statement
 
 Tenant Users need to temporarily freeze a running workload and later continue
-its existing execution. OSAC's current VM lifecycle interface provides Start,
-Stop, Restart, and Delete; tenant pause/resume is the missing capability
-described in [OSAC-1844](https://redhat.atlassian.net/browse/OSAC-1844).
-Stopping a VM loses its running application and RAM state, so it cannot satisfy
-that need.
+its existing execution — for example, to hold an in-memory application state
+during a short maintenance window without shutting the guest down. OSAC's
+current VM lifecycle interface provides Start, Stop, Restart, and Delete;
+tenant pause/resume is the missing capability described in
+[OSAC-1844](https://redhat.atlassian.net/browse/OSAC-1844). Stopping a VM
+loses its running application and RAM state, so it cannot satisfy that need.
+
+Pause is not a capacity- or cost-reclamation feature: while paused, RAM and
+existing resource reservations remain allocated on the host and continue to
+count against tenant quota. Reclaiming capacity requires Stop (or a future
+hibernate capability, which is out of scope). CPU/memory configuration changes
+that require a reboot continue to use today's RestartRequired / restart path;
+pause does not replace that upgrade flow.
 
 ## In Scope
 
@@ -40,6 +48,10 @@ that need.
   access.
 - Changes to existing lifecycle behavior outside the pause/resume interactions
   above, including Delete during an ordinary Start or Restart.
+- Billing-rate or metering-pipeline changes for paused VMs; any paused
+  billing-display work remains owned by
+  [OSAC-1844](https://redhat.atlassian.net/browse/OSAC-1844).
+  [Clarify: R16.Q1 / D29]
 
 ## User Stories
 
@@ -77,7 +89,9 @@ that need.
 
    Acceptance: the UI and API distinguish running from paused, show progress,
    and report the observed final state. The UI disables opposing pause/resume
-   actions during transitions. Pending Q9, the agreed lifecycle outcomes are:
+   actions during transitions. Lifecycle outcomes match the existing Start/Stop
+   desired-state pattern (not raw KubeVirt imperative reject-on-repeat
+   behavior). [Clarify: R15.Q1 / D30]
 
    - Pause on Paused, Resume on Running, a repeated pending request, and Start
      on Paused or during Pause/Resume succeed without new work. For overlapping
@@ -140,11 +154,15 @@ that need.
 
 - **KubeVirt:** its documented
   [pause/unpause behavior](https://kubevirt.io/user-guide/user_workloads/lifecycle/#pausing-and-unpausing-a-virtual-machine)
-  supplies the execution and memory-retention semantics. It reports Paused,
-  or Unknown when the host state cannot be obtained, but does not reconcile a
-  desired pause state for an existing VM. Its native actions can reject
-  repeated or premature requests, so Q9 determines which behavior OSAC
-  exposes. The design must validate supported VM configurations.
+  supplies the execution and memory-retention semantics (CPU/I/O freeze with
+  RAM retained). It reports Paused, or Unknown when the host state cannot be
+  obtained, but does not reconcile a desired pause state for an existing VM.
+  OSAC exposes the Start/Stop-aligned lifecycle outcomes above; the design
+  adapts KubeVirt's imperative pause/unpause API to those outcomes
+  (including no-ops and latest-wins). [Clarify: R15.Q1 / D30]
+  The design must validate supported VM configurations and document that a
+  paused VMI remains scheduled on its node (subject to ordinary
+  Kubernetes/CNV node-pressure and eviction behavior outside this Feature).
 - **VMaaS networking:** preservation must align with the accepted
   [networking decisions](https://github.com/osac-project/osac/blob/main/docs/agent-context/networking-decisions.md)
   and [VMaaS networking design](https://github.com/osac-project/enhancement-proposals/blob/main/enhancements/OSAC-1435-vmaas-networking/design.md#network-status-and-address-discovery).
@@ -152,19 +170,13 @@ that need.
   networks, including long pauses, and accurate OSAC state reporting.
 - **OSAC-UI and OSAC-VMaaS:** UX/UI design and the lifecycle capability must
   agree on actions, progress, errors, and tenant permissions.
-  [OSAC-1844](https://redhat.atlassian.net/browse/OSAC-1844) overlaps this delivery.
+  [OSAC-7019](https://redhat.atlassian.net/browse/OSAC-7019) owns pause/resume
+  lifecycle UI and API. [OSAC-1844](https://redhat.atlassian.net/browse/OSAC-1844)
+  owns any paused billing-display expectations. [Clarify: R16.Q1 / D29]
 - **Deployment compatibility:** OSAC does not currently support in-place
   platform upgrades. The design must assess compatibility for existing VM
   state and independently deployed components, as required by
   [OSAC's platform scope guidance](https://github.com/osac-project/osac/blob/main/docs/agent-context/osac-dimensions.md#milestone-scoping).
-
-The following decisions remain open for review and identify unfinished
-requirements and acceptance criteria.
-
-| ID | Decision needed | Owner | Effect on the draft |
-|----|-----------------|-------|---------------------|
-| Q8 | Ownership and coordination with OSAC-1844, including any billing-display expectations. | OSAC-VMaaS and OSAC-UI | Resolves overlapping scope before implementation. |
-| Q9 | Should OSAC mirror KubeVirt's native pause/unpause behavior, or keep the agreed OSAC outcomes above for repeated requests, transitions, and uncertain host state? [User] | OSAC-VMaaS and OSAC-UI | Determines the final lifecycle acceptance cases and UI/API behavior. |
 
 ---
 
@@ -174,5 +186,8 @@ Authored: draft @ prd 0.11.5 - 7e2d081, workspace main @ fa782878f
 Final: revise @ prd 0.11.5 - b369da0, workspace main @ fa782878f
 
 > Context changed between draft and revise.
+
+Review follow-up: locked Q8/Q9 and strengthened Problem Statement (capacity
+vs freeze, restart-for-resize) from PR #450 technical review.
 
 <!-- ai-workflow-provenance:{"schema_version":1,"provenance_kind":"session","workflow":"prd","workflow_version":"0.11.5","ai_workflows":"b369da0","source_repo":"fa782878f","source_repo_branch":"main","commits_behind_main":0,"commits_ahead_main":0,"main_ref":"main","phases":["draft","revise","revise","revise","revise","revise","revise","revise","revise","revise","revise","revise","revise","revise","revise","revise","revise","revise","revise","revise","revise","revise","revise","revise","revise","revise","revise"],"authoring_modes":["skill"],"context_changed":true,"origin_untracked":false} -->

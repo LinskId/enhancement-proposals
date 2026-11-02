@@ -2,11 +2,13 @@
 
 ## Status
 
-- Rounds completed: 15; round 1 was reconstructed from the existing conversation.
-- Open gaps: 2 (Q8 and Q9 below).
-- Exit criteria met: No; remaining delivery-scope decisions are open.
+- Rounds completed: 16; round 1 was reconstructed from the existing conversation.
+- Open gaps: 0 (Q8 and Q9 locked in R16 / D29–D30).
+- Exit criteria met: Yes for clarification; PRD remains draft pending author merge
+  of the review follow-up.
 - Draft authorization: The user requested a first PRD draft after the remaining
-  questions were identified. They remain explicit questions, not inferred answers.
+  questions were identified. Q8 and Q9 were later locked by the PR #450 review
+  follow-up to unblock design.
 
 ## Round 1 — Scope and Delivery
 
@@ -665,32 +667,83 @@ CLI Pause/Resume commands are not part of this Feature.
 
 After reviewing KubeVirt's VM API, the user asked to keep the earlier OSAC
 lifecycle decisions concise in the PRD and explicitly reopen whether OSAC
-should mirror KubeVirt instead. No choice between those behaviors was made.
+should mirror KubeVirt instead. No choice between those behaviors was made
+in the original drafting rounds.
+
+#### Impact (superseded by D30)
+
+The prior decisions remained provisional until Q9 was locked. KubeVirt reports
+Paused but has no desired pause state for an existing VM; native pause/unpause
+calls can reject repeated or premature requests. See D30 for the locked
+choice. Background references: KubeVirt v1.9.1
+[VM API types](https://github.com/kubevirt/kubevirt/blob/v1.9.1/staging/src/kubevirt.io/api/core/v1/types.go)
+and [pause/unpause handlers](https://github.com/kubevirt/kubevirt/blob/v1.9.1/pkg/virt-api/rest/lifecycle.go#L260).
+
+---
+
+## Round 16 — Review follow-up (Q8 / Q9)
+
+### R16.Q1: How is OSAC-7019 coordinated with OSAC-1844 (Q8)?
+
+#### Answer
+
+Locked by the PR #450 technical review follow-up:
+
+- **OSAC-7019** owns tenant pause/resume lifecycle through the UI and API
+  (actions, states, progress, errors, tenant authorization, resource/IP/MAC
+  retention semantics, and documentation of retained reservations).
+- **OSAC-1844** owns any paused **billing-display** expectations and related
+  commercial presentation of paused VMs.
+- This Feature does **not** change metering pipelines, pricing, or discounts.
+  Quota and allocation reports continue to count paused reservations
+  (pause is not capacity reclaim).
 
 #### Impact
 
-The prior decisions remain in the draft as provisional acceptance cases.
-KubeVirt reports Paused but has no desired pause state for an existing VM;
-native pause/unpause calls can reject repeated or premature requests. Q9 must
-be resolved before the affected acceptance cases are final. This follows the
-KubeVirt v1.9.1 [VM API types](https://github.com/kubevirt/kubevirt/blob/v1.9.1/staging/src/kubevirt.io/api/core/v1/types.go)
-and [pause/unpause handlers](https://github.com/kubevirt/kubevirt/blob/v1.9.1/pkg/virt-api/rest/lifecycle.go#L260).
+Removes duplicate ownership of overlapping UI/lifecycle work. Billing-display
+stories stay on OSAC-1844. Design for OSAC-7019 can proceed without waiting on
+billing-rate policy.
+
+#### Decision (D29)
+
+Q8 resolved as above. Billing-display for paused VMs is out of scope for
+OSAC-7019 and owned by OSAC-1844.
+
+---
+
+### R16.Q2: Mirror KubeVirt native pause/unpause, or keep OSAC lifecycle outcomes (Q9)?
+
+#### Answer
+
+Locked by the PR #450 technical review follow-up: **keep the agreed OSAC
+lifecycle outcomes** (no-op when already in the requested state; latest
+accepted Pause/Resume wins during transitions; invalid-state errors as
+already clarified). Do **not** expose raw KubeVirt imperative reject-on-repeat
+behavior to tenants.
+
+Rationale: OSAC Start/Stop already follows a desired-state / latest-wins
+client and API pattern. Pause/resume must feel consistent with that surface.
+KubeVirt remains the execution engine for freeze/retain-RAM semantics; the
+design adapts its imperative pause/unpause API to OSAC's outcomes.
+
+#### Impact
+
+Story 4 acceptance cases are final (no longer provisional). Design must map
+OSAC desired pause/resume state onto KubeVirt pause/unpause calls, including
+idempotent no-ops.
+
+#### Decision (D30)
+
+Q9 resolved: OSAC keeps the Start/Stop-aligned lifecycle outcomes. KubeVirt
+supplies pause/unpause mechanics and RAM retention; OSAC does not mirror
+native reject-on-repeat semantics at the tenant UI/API.
 
 ---
 
 ## Remaining Gaps
 
-| ID | Question | Owner | Impact |
-|---|---|---|---|
-| Q8 | How is this Feature coordinated with OSAC-1844, including ownership of overlapping UI requirements? | OSAC-VMaaS and OSAC-UI | Avoids duplicate delivery and establishes which issue owns any additional billing-display requirements. |
-| Q9 | Should OSAC mirror KubeVirt's native pause/unpause behavior, or keep the previously agreed OSAC outcomes for repeated requests, transitions, and uncertain host state? | OSAC-VMaaS and OSAC-UI | Determines the final lifecycle acceptance cases and UI/API behavior. |
-
-Q3 is resolved by D21–D23: pause-specific deletion behavior is defined,
-while general Delete behavior during Start or Restart remains outside scope.
-
-These owners follow the Feature's owning team and the bootstrap UI/UX teams;
-no individual assignees are inferred. The remaining questions are carried into
-the draft. Q2, Q4, Q5, Q6, and Q7 are resolved by D24–D28.
+None. Q3 is resolved by D21–D23. Q2, Q4, Q5, Q6, and Q7 are resolved by
+D24–D28. Q8 and Q9 are resolved by D29–D30.
 
 ## Evidence and Interpretation Boundaries
 
@@ -700,7 +753,11 @@ the draft. Q2, Q4, Q5, Q6, and Q7 are resolved by D24–D28.
 - The accepted VMaaS networking design already commits to retaining the guest
   address across restarts and live migration. D5 extends the requirement to
   successful pause/resume; the design must validate the manager behavior.
-- OSAC-1844 describes billing implications. Those statements are context for
-  Q8; no pricing, discounts, or metering changes are inferred for this draft.
-- Existing Start/Stop/Restart client code and OSAC-1844 provide the current
-  lifecycle-interface baseline. No live-cluster behavior was verified.
+- OSAC-1844 describes billing implications. Per D29, billing-display stays on
+  OSAC-1844; this Feature does not infer pricing, discounts, or metering
+  changes.
+- Existing Start/Stop/Restart client code provides the lifecycle-interface
+  baseline that D30 aligns pause/resume with. No live-cluster behavior was
+  verified in clarification.
+- Pause freezes CPU and I/O but does not free host RAM or the scheduled VMI
+  slot; it is not a cost-optimization or capacity-reclaim feature.
